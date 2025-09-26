@@ -1,0 +1,575 @@
+{
+  "name": "BuscaCandidatosSAP",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1056,
+        64
+      ],
+      "id": "f889f617-c665-4d27-be3c-c5014a29c95f",
+      "name": "When chat message received",
+      "webhookId": "9ecea456-708b-4bea-9d15-b7e152f79d31"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const data = item.json.items || [];\n  \n  return data.map(result => {\n    return {\n      nome: result.title,\n      link: result.link,\n      descricao: result.snippet,\n      imagem: result.pagemap?.cse_image?.[0]?.src || null,\n      thumbnail: result.pagemap?.cse_thumbnail?.[0]?.src || null\n    };\n  });\n}).flat();\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        -80
+      ],
+      "id": "346861b5-a828-41b7-80e1-36cdc3c654f6",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "maxItems": 3
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        192
+      ],
+      "id": "30e6bc46-99ab-45aa-86b7-4353f0035537",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bc4064e7-3b09-426d-a6e9-d141d36b7782",
+              "name": "nome",
+              "value": "={{ $json.nome }}",
+              "type": "string"
+            },
+            {
+              "id": "ccf2779c-0737-4175-8127-986bffcb5f71",
+              "name": "link",
+              "value": "={{ $json.link }}",
+              "type": "string"
+            },
+            {
+              "id": "ce42c9bc-1c64-432e-9a46-23e475413f8e",
+              "name": "descricao",
+              "value": "={{ $json.descricao }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1504,
+        192
+      ],
+      "id": "643b7ca6-ba94-464b-acf4-6748d7cdd242",
+      "name": "NomeLink"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        432,
+        192
+      ],
+      "id": "414d3d5d-6b54-4d92-ae8a-2d1c375f164e",
+      "name": "Wait",
+      "webhookId": "099e2787-d05d-4688-881d-c3d8cd884f2e"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1mWMjINbrKkPZaKSCTwEEUgeKUmAsmNB6H1LUFm6jZyw",
+          "mode": "list",
+          "cachedResultName": "Candidatos090725",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mWMjINbrKkPZaKSCTwEEUgeKUmAsmNB6H1LUFm6jZyw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mWMjINbrKkPZaKSCTwEEUgeKUmAsmNB6H1LUFm6jZyw/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "NOME": "={{ $json.nome }}",
+            "LINK": "={{ $json.link }}",
+            "DESCRICAO": "={{ $json.descricao }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "NOME",
+              "displayName": "NOME",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "DESCRICAO",
+              "displayName": "DESCRICAO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1728,
+        192
+      ],
+      "id": "9ac1a429-ca74-4135-ba12-474378bd9343",
+      "name": "Google Sheets"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.nome }}  +\" \" + {{ $json.descricao }} + \" \" + {{ $json.link }}",
+        "options": {
+          "systemMessage": "=Você é um tech Recruiter experiente em selecionar desenvolvedores. \nAprove somente candidatos que estejam dentro do critério da Vaga.\n\n[critério = {{ $('LLM_ExtraiPerfil').item.json.output.Caracteristicas }}]\n\nBusque, analise e entenda o perfil requerido da Vaga.\nEncontre os candidatos e Devolva os dados abaixo.\n\nSua resposta deve ser \nNOME,\tLINK,\tDESCRICAO e a sua avaliação\n\nRegras de Ouro.\nDevolva somente os candidatos aprovados."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        784,
+        192
+      ],
+      "id": "cf77dfa6-3890-4dc3-a95a-9cb1da1a217c",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        656,
+        400
+      ],
+      "id": "80f332de-4ac8-40dc-8b1b-0ba6f491163b",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5lOoaqg1O0RVovES",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Recupera um arquivo com a descrição da Vaga.",
+        "url": "https://docs.google.com/document/d/1eftj3SS8kDkhVbXQAKCOqEeXpEhl1HpwAri_c8fVt4U/edit?usp=sharing",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1072,
+        384
+      ],
+      "id": "7452fea1-4bc1-4921-941b-23c53fb5516e",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        464
+      ],
+      "id": "76ad7e03-0d80-464b-9891-df4922ffa535",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5lOoaqg1O0RVovES",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -784,
+        -80
+      ],
+      "id": "9cd157f8-9480-40d9-8c2c-579e72ab7418",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"Titulo\": \"Título da vaga\",\n  \"Caracteristicas\": [\"característica 1\", \"característica 2\", \"característica 3\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        192
+      ],
+      "id": "987e0c27-3bf5-4f71-93ec-d4d9916d7cb4",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        944,
+        400
+      ],
+      "id": "b1a94a76-8b43-4339-b425-cebff4151669",
+      "name": "Think"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"Titulo\": \"California\",\n\t\"Caracteristicas\": [\"Los Angeles\", \"San Francisco\", \"San Diego\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        64,
+        320
+      ],
+      "id": "fcce711b-2a0b-4151-99c1-857d3df6d0cd",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "1eftj3SS8kDkhVbXQAKCOqEeXpEhl1HpwAri_c8fVt4U"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        -80
+      ],
+      "id": "86623958-a771-4abd-8863-8268ad7e061d",
+      "name": "GDocDescricaoVaga",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "18sIr39PnptWFKPP",
+          "name": "GoogleDocs_recrutai.sap"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analise a descrição da vaga abaixo e devolva SOMENTE um objeto JSON válido, sem texto adicional.  \n\nO JSON deve ter exatamente 2 campos:\n{\n  \"Titulo\": \"Título da vaga\",\n  \"Caracteristicas\": [\"característica 1\", \"característica 2\", \"característica 3\"]\n}\n\nRegras:\n- Pegue apenas o título principal da vaga.\n- Liste somente as 3 características mais relevantes, obrigatórias ou essenciais para preenchimento da vaga.\n- Não adicione comentários, markdown ou texto fora do JSON.\n\nDescrição da vaga:\n{{ $json.content }}\n",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -256,
+        -80
+      ],
+      "id": "c08ef1a9-ada4-44e9-bf72-f687b76684a7",
+      "name": "LLM_ExtraiPerfil"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fa493e07-b75e-40ca-8a8c-af356a300311",
+              "name": "ID",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "5d26b0be-a728-4c64-b579-cb680b3c87b6",
+              "name": "MaxPages",
+              "value": 25,
+              "type": "number"
+            },
+            {
+              "id": "f95d0a99-a5bd-49c2-ba2e-d4d503887296",
+              "name": "Pesquisa",
+              "value": "={{ $json.output.Titulo }} + \" \" + {{ $json.output.Caracteristicas }}",
+              "type": "string"
+            },
+            {
+              "id": "3e323d1f-141e-4441-ac79-a6686a6ce13f",
+              "name": "start",
+              "value": "13",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        112,
+        -80
+      ],
+      "id": "6cc3b49f-ac5f-445f-b64c-113d396cf103",
+      "name": "Campos_TituloeCaracteristicas"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "=AIzaSyDCHPJ-W2LuwjBHHGyashvmBB6SF5WI7Kc"
+            },
+            {
+              "name": "cx",
+              "value": "87ac54599c323443c"
+            },
+            {
+              "name": "q",
+              "value": "= {{ $('LLM_ExtraiPerfil').item.json.output.Titulo }}"
+            },
+            {
+              "name": "start",
+              "value": "={{$json.start}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        384,
+        -80
+      ],
+      "id": "7a416092-87f1-4b34-9d66-17a2b7dd22e9",
+      "name": "HTTP BuscaLinkedIn"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        []
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "NomeLink",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NomeLink": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LLM_ExtraiPerfil",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "GDocDescricaoVaga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        []
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "LLM_ExtraiPerfil",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GDocDescricaoVaga": {
+      "main": [
+        [
+          {
+            "node": "LLM_ExtraiPerfil",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM_ExtraiPerfil": {
+      "main": [
+        [
+          {
+            "node": "Campos_TituloeCaracteristicas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campos_TituloeCaracteristicas": {
+      "main": [
+        [
+          {
+            "node": "HTTP BuscaLinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP BuscaLinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0847c114-ee4b-4298-9759-da18123a97f7",
+  "meta": {
+    "instanceId": "6716ebc38bf75889e133305fec39466afeca12144212b7d91551f2f5735133b8"
+  },
+  "id": "u9ZCU4ZGYGc4dCPO",
+  "tags": []
+}
