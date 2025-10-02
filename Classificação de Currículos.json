@@ -1,0 +1,1640 @@
+{
+  "name": "Classificação de Currículos",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyHour"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2528,
+        208
+      ],
+      "id": "d4f1fef0-0168-4957-9c17-014b51714852",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YihGCJCDiMLw2ecq",
+          "name": "gmail n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputText": "=Assunto:{{ $json.Assunto }}\nCorpoEmail: {{ $json.CorpoDoEmail }}\nEmailOrigem:{{ $json.EmailRemetente }}\nNomeRemetente:{{ $json.NomeRemetente }}",
+        "categories": {
+          "categories": [
+            {
+              "category": "Recrutamento",
+              "description": "E-mails relacionados a processos de seleção, incluindo currículos, candidaturas, alertas de vagas, pedidos de entrevista ou contatos sobre oportunidades de emprego."
+            },
+            {
+              "category": "EmissaoNF",
+              "description": "Solicitações para geração ou envio de notas fiscais, dúvidas sobre documentos fiscais, pedidos de segunda via ou confirmações de faturamento."
+            },
+            {
+              "category": "EmissaoNFOutros",
+              "description": "Mensagens que não se enquadram em recrutamento, emissão de NF ou demais categorias definidas. Inclui comunicações gerais, newsletters, contatos comerciais ou informações não específicas de RH ou financeiro."
+            },
+            {
+              "category": "Institucional/Marketing",
+              "description": "E-mails de divulgação, eventos, campanhas de marketing, comunicados internos e externos ou newsletters institucionais."
+            },
+            {
+              "category": "Financeiro",
+              "description": "Assuntos relacionados a pagamentos, cobranças, comprovantes, conciliação ou questões de fluxo de caixa que não sejam emissão de NF."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textClassifier",
+      "typeVersion": 1.1,
+      "position": [
+        -1600,
+        160
+      ],
+      "id": "22d30ebf-ccac-470a-b91c-321501cbfdf7",
+      "name": "Text Classifier"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}",
+        "simple": false,
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -1072,
+        144
+      ],
+      "id": "200ab292-55c8-42e8-a7fa-77f72ca15560",
+      "name": "Get a message",
+      "webhookId": "0afe3e6d-57ca-4dd6-b02d-a67038e9d49a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YihGCJCDiMLw2ecq",
+          "name": "gmail n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "=attachment_0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        688,
+        160
+      ],
+      "id": "09d60575-6ac6-4b4e-8ee9-76765beacc82",
+      "name": "Extract from File",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2576,
+        304
+      ],
+      "id": "991a5fc2-4886-47a8-8371-6a8f8403c3e9",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "A9X3r2Rr3SYri84C",
+          "name": "n8n ser"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  try {\n    let raw = item.json.output ?? \"\";\n    let s = (typeof raw === \"string\") ? raw : JSON.stringify(raw);\n\n    s = s.replace(/^\\uFEFF/, \"\")\n         .trim()\n         .replace(/^```(?:json)?\\s*/i, \"\")\n         .replace(/```$/i, \"\")\n         .replace(/^\\s*json\\s*/i, \"\");\n\n    if (!s.trim().startsWith(\"{\")) {\n      const m = s.match(/\\{[\\s\\S]*\\}/m);\n      if (m) s = m[0];\n    }\n\n    let parsedData;\n    try {\n      parsedData = JSON.parse(s);\n    } catch (e1) {\n      s = s.replace(/\\\\(?![\"\\\\/bfnrtu])/g, \"\\\\\\\\\");\n      s = s.replace(/[\\u0000-\\u0019]/g, (c) => {\n        if (c === \"\\n\" || c === \"\\r\" || c === \"\\t\") return c;\n        return \"\";\n      });\n      parsedData = JSON.parse(s);\n    }\n\n    const toArray = (v) => {\n      if (Array.isArray(v)) return v;\n      if (typeof v === \"string\" && v.trim()) {\n        try { const a = JSON.parse(v); return Array.isArray(a) ? a : [v]; }\n        catch { return v.split(/[;,|\\n]/).map(x=>x.trim()).filter(Boolean); }\n      }\n      return [];\n    };\n    const joinList = (arr) => Array.isArray(arr) ? arr.join(\", \") : \"\";\n\n    const stripAccents = (str) =>\n      (str || \"\").normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\");\n\n    const getInitials = (fullName) => {\n      const stop = new Set([\"de\",\"da\",\"das\",\"do\",\"dos\",\"di\",\"du\",\"e\",\"del\",\"della\",\"van\",\"von\",\"la\",\"le\"]);\n      const tokens = stripAccents(fullName)\n        .trim()\n        .split(/[\\s-]+/)\n        .filter(t => t.length > 0);\n\n      const initials = tokens\n        .filter(t => !stop.has(t.toLowerCase()))\n        .map(t => t[0].toUpperCase());\n\n      return initials.length > 0 ? initials.join(\"\") : (tokens[0]?.[0]?.toUpperCase() || \"\");\n    };\n\n    const digitsOnly = (x) => (x || \"\").toString().replace(/\\D+/g, \"\");\n    const normalizeBRPhone = (str) => {\n      const d = digitsOnly(str);\n      if (!d) return null;\n      let dd = d;\n      if (dd.startsWith(\"55\") && (dd.length === 12 || dd.length === 13)) dd = dd.slice(2);\n\n      if (dd.length === 11 || dd.length === 10) {\n        const ddd = dd.slice(0, 2);\n        const num = dd.slice(2);\n        if (num.startsWith(\"9\") || dd.length === 11) {\n          const pretty = `(${ddd}) ${num.length === 9 ? num.slice(0,5)+'-'+num.slice(5) : num.slice(0,4)+'-'+num.slice(4)}`;\n          const e164 = `+55${ddd}${num}`;\n          return { pretty, e164, isCel: num.startsWith(\"9\") };\n        }\n      }\n      return null;\n    };\n\n    const pickCellPhone = (data) => {\n      const keys = [\"telefone_celular\",\"celular\",\"telefone\",\"phone\",\"mobile\",\"contato\"];\n      const candidates = [];\n      for (const k of keys) {\n        const v = data?.[k];\n        if (!v) continue;\n        if (Array.isArray(v)) candidates.push(...v.map(String));\n        else candidates.push(String(v));\n      }\n      const normed = candidates.map(normalizeBRPhone).filter(Boolean);\n      return normed.find(n => n.isCel) || normed[0] || null;\n    };\n\n    const nomecompleto  = parsedData.nome_completo || \"\";\n    const resumo        = parsedData.resumo || \"\";\n    const minicurriculo = parsedData.minicurriculo || \"\";\n    const habilidades   = toArray(parsedData.habilidades);\n    const idiomas       = toArray(parsedData.idiomas);\n    const experiencias  = toArray(parsedData.experiencias);\n    const educacao      = toArray(parsedData.educacao);\n    const email         = parsedData.email || null;\n\n    let telObj = parsedData.telefone_celular ? normalizeBRPhone(parsedData.telefone_celular) : null;\n    if (!telObj) telObj = pickCellPhone(parsedData);\n\n    const fmtExp = experiencias.length ? experiencias.map(exp => {\n      if (typeof exp === \"string\") return exp;\n      return `${exp.cargo || \"\"} na ${exp.empresa || \"\"} (${exp.periodo || \"\"})\\n${exp.descricao || \"\"}`.trim();\n    }).join(\"\\n\\n\") : \"\";\n\n    const fmtEdu = educacao.length ? educacao.map(edu => {\n      if (typeof edu === \"string\") return edu;\n      return `${edu.curso || \"\"} em ${edu.instituicao || \"\"} (${edu.periodo || \"\"})`.trim();\n    }).join(\"\\n\") : \"\";\n\n    item.json.NOME_COMPLETO_CANDIDATO = nomecompleto;\n    item.json.INICIAIS_NOME           = getInitials(nomecompleto);\n    item.json.RESUMO_CANDIDATO        = resumo;\n    item.json.MINICURRICULO_CANDIDATO = minicurriculo;\n    item.json.HABILIDADES_CANDIDATO   = joinList(habilidades);\n    item.json.IDIOMAS_CANDIDATO       = joinList(idiomas);\n    item.json.EXPERIENCIAS_CANDIDATO  = fmtExp;\n    item.json.EDUCACAO_CANDIDATO      = fmtEdu;\n    item.json.EXPERIENCIAS_OBJ        = experiencias;\n    item.json.EDUCACAO_OBJ            = educacao;\n\n    item.json.TELEFONE_CELULAR        = telObj ? telObj.pretty : null;\n    item.json.TELEFONE_CELULAR_E164   = telObj ? telObj.e164   : null;\n    item.json.EMAIL_CANDIDATO         = email;\n\n  } catch (error) {\n    item.json.error                   = `Erro ao processar o JSON principal: ${error.message}`;\n    item.json.NOME_COMPLETO_CANDIDATO = null;\n    item.json.INICIAIS_NOME           = null;\n    item.json.RESUMO_CANDIDATO        = null;\n    item.json.MINICURRICULO_CANDIDATO = null;\n    item.json.HABILIDADES_CANDIDATO   = null;\n    item.json.EXPERIENCIAS_CANDIDATO  = null;\n    item.json.IDIOMAS_CANDIDATO       = null;\n    item.json.EDUCACAO_CANDIDATO      = null;\n    item.json.EXPERIENCIAS_OBJ        = [];\n    item.json.EDUCACAO_OBJ            = [];\n    item.json.TELEFONE_CELULAR        = null;\n    item.json.TELEFONE_CELULAR_E164   = null;\n    item.json.EMAIL_CANDIDATO         = null;\n  }\n}\nreturn $input.all();\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4976,
+        240
+      ],
+      "id": "97f578de-1cff-4938-bb1c-4959ba95c187",
+      "name": "Code Extratifica CV"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1zrMFIO-kYwdSdFPK9LwAQiwG-arHILYvh6GRV2byBnE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1MumdiPdH_YLycDfTnwJJarZ6pMa8IcRAh1TbdpdV40s/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PARECER_IA": "={{ $json.PARECER_IA }}",
+            "HABILIDADES": "={{ $('Fields_DeCamposParaCV').item.json.HABILIDADES }}",
+            "EMAIL": "={{ $('Fields_DeCamposParaCV').item.json.EMAIL }}",
+            "WHATSAPP": "={{ $('Fields_DeCamposParaCV').item.json.WhatsApp }}",
+            "FORMACAO": "={{ $('Fields_DeCamposParaCV').item.json.EDUCACAO }}",
+            "LINGUAS": "={{ $('Fields_DeCamposParaCV').item.json.IDIOMA }}",
+            "EXPERIENCIAS": "={{ $('Fields_DeCamposParaCV').item.json.EXPERIENCIA }}",
+            "MATCH_VAGA": "={{ $json.ResutadoIA }}",
+            "RESUMO": "={{ $('Code Extratifica CV').item.json.RESUMO_CANDIDATO }}",
+            "MINICV": "={{ $('Code Extratifica CV').item.json.MINICURRICULO_CANDIDATO }}",
+            "NOME": "={{ $('Fields_DeCamposParaCV').item.json.NOME_COMPLETO }}",
+            "TAXAHORA": "={{ $json.Taxa_Hora }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "NOME",
+              "displayName": "NOME",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "RESUMO",
+              "displayName": "RESUMO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "MINICV",
+              "displayName": "MINICV",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "HABILIDADES",
+              "displayName": "HABILIDADES",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "EXPERIENCIAS",
+              "displayName": "EXPERIENCIAS",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LINGUAS",
+              "displayName": "LINGUAS",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "FORMACAO",
+              "displayName": "FORMACAO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "PARECER_IA",
+              "displayName": "PARECER_IA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "MATCH_VAGA",
+              "displayName": "MATCH_VAGA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "WHATSAPP",
+              "displayName": "WHATSAPP",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "EMAIL",
+              "displayName": "EMAIL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "TAXAHORA",
+              "displayName": "TAXAHORA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "DATADOREGISTRO",
+              "displayName": "DATADOREGISTRO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "PercentAderencia",
+              "displayName": "PercentAderencia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        6608,
+        256
+      ],
+      "id": "861e8bea-fd01-434c-97c9-2d062b5a51bb",
+      "name": "GravaNaPlanilhaVaga",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ykX0XSDtFHq2TZOb",
+          "name": "sheets n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $json.NOME }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "18WyEQvFfc4o-jhemZ5eFghwi-FdrKZH_",
+          "mode": "list",
+          "cachedResultName": "Candidatos_Erika",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/18WyEQvFfc4o-jhemZ5eFghwi-FdrKZH_"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        6832,
+        256
+      ],
+      "id": "b892f041-0023-466c-a9fa-8726703f32b5",
+      "name": "CriaPastaCandidato",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GCRMmB0z0kiomtQp",
+          "name": "drive n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "fileId": {
+          "__rl": true,
+          "value": "=1tE7qmb4XcaQltPT1LbYdrIJK3J3RPACRTPF9-zc-N6o",
+          "mode": "id"
+        },
+        "name": "={{ $('GravaNaPlanilhaVaga').item.json['NOME']}} ",
+        "sameFolder": false,
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('CriaPastaCandidato').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "copyRequiresWriterPermission": true,
+          "description": ""
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        7136,
+        256
+      ],
+      "id": "f478e0cf-d101-4f6f-8839-10d0f584f6d5",
+      "name": "CopiaModeloCV",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GCRMmB0z0kiomtQp",
+          "name": "drive n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $json.id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "replaceAll",
+              "text": "[PERFIL-CANDIDATO]",
+              "replaceText": "={{ $('Fields_DeCamposParaCV').item.json.PERFIL }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "[CURSOS-CANDIDATO]",
+              "replaceText": "={{ $('Fields_DeCamposParaCV').item.json.HABILIDADES }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": " [EXPERIENCIA-CANDIDATO]",
+              "replaceText": "={{ $('Fields_DeCamposParaCV').item.json.EXPERIENCIA }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "[IDIOMA-CANDIDATO]",
+              "replaceText": "={{ $('Fields_DeCamposParaCV').item.json.IDIOMA }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "[FORMACAO-CANDIDATO]",
+              "replaceText": "={{ $('Fields_DeCamposParaCV').item.json.EDUCACAO }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "[HABILIDADES]",
+              "replaceText": "={{ $('Fields_DeCamposParaCV').item.json.HABILIDADES }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "[INICIAIS_NOME]",
+              "replaceText": "ININOME"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        7456,
+        256
+      ],
+      "id": "3a513af9-a419-4940-a507-32e95971983f",
+      "name": "Update a document1",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "gX8546DaKHK1Pe9c",
+          "name": "docs n8n ser"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Extract from File').item.json.text }}",
+        "options": {
+          "systemMessage": "=Você é um analista de dados altamente especializado na extração e estruturação de informações de currículos.  \nDada uma entrada de texto contendo dados de um currículo, sua tarefa é processá-los e retornar SOMENTE um objeto JSON válido.\n\nO objeto JSON final deve conter as seguintes chaves no nível superior:\n\n{\n  \"nome_completo\": \"String com o nome completo do candidato\",\n  \"iniciais_nome\": \"String com as iniciais do nome e sobrenomes (exemplo: 'Ernani Batista Junior' => 'EBJ')\",\n  \"resumo\": \"Descrição geral e detalhada do candidato\",\n  \"minicurriculo\": \"Resumo extremamente sucinto (2 a 3 linhas), destacando função principal, senioridade e áreas-chave\",\n  \"telefone_celular\": \"Número de celular do candidato, se identificado, preferindo números iniciados por '9' (ex: 11987654321). Caso não exista, retornar vazio\",\n  \"email\": \"E-mail principal de contato do candidato. Caso não exista, retornar vazio\",\n  \"habilidades\": [\"Lista de strings, cada string é uma habilidade individual\"],\n  \"experiencias\": [\n    {\n      \"cargo\": \"Função exercida, ex: Consultor Funcional SAP FI\",\n      \"empresa\": \"Nome da empresa, ex: Loja Elétrica\",\n      \"periodo\": \"Período da experiência, ex: (12/2024 – Atual)\",\n      \"descricao\": \"Descrição da atuação\"\n    }\n  ],\n  \"idiomas\": [\"Lista de strings, cada string é um idioma\"],\n  \"educacao\": [\n    {\n      \"curso\": \"Nome do curso ou formação\",\n      \"instituicao\": \"Instituição de ensino\",\n      \"periodo\": \"Período da formação\"\n    }\n  ]\n}\n\n### Observações Cruciais para a Saída JSON:\n- A resposta deve ser exclusivamente o objeto JSON, sem texto adicional, sem explicações, sem formatação antes ou depois.  \n- Certifique-se de que todos os valores de string dentro do JSON estejam obrigatoriamente entre aspas duplas (\").  \n- Para que o JSON seja válido, não é possível remover as aspas de strings.  \n- As seções 'experiencias' e 'educacao' devem seguir o formato de lista de objetos, conforme especificado, mantendo a estrutura detalhada de cada item.  \n- Todos os campos devem estar presentes, mesmo que vazios.\nO  texto para analise é {{ $('Extract from File').item.json.text }}"
+        }
+      },
+      "id": "c95a381a-140d-473c-9fa5-d89dbaeb12b0",
+      "name": "AgentLeCV",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2560,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.PERFIL }} + \" ; \" +  {{ $json.HABILIDADES }} + \" ; \" +{{ $json.EXPERIENCIAS_ARRAY }} + {{ $('Fields_CamposOriginarios').item.json.CorpoDoEmail }}",
+        "options": {
+          "systemMessage": "Você é um Tech Recruiter especializado em seleção de consultores SAP.\nSua tarefa é analisar o currículo do candidato (em JSON estruturado) e a vaga (em texto).\nCom base nessas entradas, devolva SOMENTE um objeto JSON válido, sem explicações, sem formatação de markdown e sem cercas de código.\n\nO objeto final deve ter exatamente estas chaves:\n\n{\n\"resumo_candidato\": \"Breve descrição do candidato\",\n\"aderencia_tecnica\": \"Pontos fortes alinhados à vaga\",\n\"gaps\": \"Pontos de atenção ou lacunas\",\n\"fit_contextual\": \"Senioridade, experiências e aderência ao contexto\",\n\"percentual_aderencia\": \"Nota de 0 a 100 (inteiro)\",\n\"taxa_hora\": \"Valor hora em R$ (ex: R$ 120,00 ou R$ 0,00 se não informado)\",\n\"conclusao_recomendacao\": \"Recomendação final\"\n}\n\nRegras:\n\nO output deve ser estritamente um objeto JSON válido.\n\nNÃO use blocos de markdown ou cercas de código.\n\nNÃO adicione texto explicativo antes ou depois do JSON.\n\nStrings sempre entre aspas duplas.\n\nTodos os campos devem estar presentes, mesmo que vazios.\n\n\"percentual_aderencia\" deve ser sempre um número inteiro de 0 a 100.\n\n\"taxa_hora\" deve sempre estar presente, retornando \"R$ 0,00\" caso o currículo não traga essa informação.\n\nIMPORTANTE: Sua resposta deve ser SOMENTE um objeto JSON válido, não uma string.\nNão coloque aspas no objeto inteiro.\nNão adicione \\n escapados.\nNão use blocos de markdown."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        5552,
+        160
+      ],
+      "id": "da3eda5d-ba76-4993-bfc2-d388b47ba998",
+      "name": "Agent_FazMatch_Candidato"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        5344,
+        592
+      ],
+      "id": "2bf57559-6961-469c-b641-9a0496ba4bff",
+      "name": "Google Gemini Chat Model3",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "A9X3r2Rr3SYri84C",
+          "name": "n8n ser"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Busca Vaga para Match com o Curriculo",
+        "operation": "get",
+        "documentURL": "1eftj3SS8kDkhVbXQAKCOqEeXpEhl1HpwAri_c8fVt4U"
+      },
+      "type": "n8n-nodes-base.googleDocsTool",
+      "typeVersion": 2,
+      "position": [
+        5920,
+        512
+      ],
+      "id": "c4e88ec8-39c4-4f1b-b862-95dbe0e42a7c",
+      "name": "Get a document in Google Docs",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "gX8546DaKHK1Pe9c",
+          "name": "docs n8n ser"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        5712,
+        560
+      ],
+      "id": "f0641c8f-11a0-4c3e-85c3-53cba719860e",
+      "name": "Think"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Fields_CamposOriginarios').item.json.EmailRemetente }}",
+        "subject": "Confirmação de recebimento do curriculo na LPJ ",
+        "message": "=Olá {{ $('Fields_DeCamposParaCV').item.json.NOME_COMPLETO }}, tudo bem?\n\nAqui é a RHanIA, Tech Recruiter da LPJ. Seu currículo foi recebido e já está em avaliação.\nEm breve entraremos em contato com os próximos passos.\n\nObrigado!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        8352,
+        240
+      ],
+      "id": "397077b2-5cb1-4c6c-8072-010b6283086b",
+      "name": "Send a message",
+      "webhookId": "fe22e181-e1c7-4b4f-ab8d-04d49322a2d3",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YihGCJCDiMLw2ecq",
+          "name": "gmail n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sanear resposta do agente (tirar cercas ```json, pegar o 1º {…}, corrigir escapes) e expor campos\nfor (const item of $input.all()) {\n  try {\n    let raw = item.json.output ?? \"\";\n\n    // garante string\n    let s = (typeof raw === \"string\") ? raw : JSON.stringify(raw);\n\n    // remove cercas de código e espaços\n    s = s.replace(/^```(?:json)?\\s*/i, \"\").replace(/```$/i, \"\").trim();\n\n    // se não começa com {, extrai o primeiro bloco {…}\n    if (!s.startsWith(\"{\")) {\n      const m = s.match(/\\{[\\s\\S]*\\}/m);\n      if (m) s = m[0];\n    }\n\n    // tenta parse direto; se falhar, corrige escapes esquisitos e parseia\n    let data;\n    try {\n      data = JSON.parse(s);\n    } catch {\n      s = s.replace(/\\\\(?![\"\\\\/bfnrtu])/g, \"\\\\\\\\\")\n           .replace(/[\\u0000-\\u0019]/g, (c) => \n             (c === \"\\n\" || c === \"\\r\" || c === \"\\t\") ? c : \"\"\n           );\n      data = JSON.parse(s);\n    }\n\n    // Mapeia para campos individuais (prontos pro Edit Fields)\n    item.json.resumo_candidato       = data.resumo_candidato ?? \"\";\n    item.json.aderencia_tecnica      = data.aderencia_tecnica ?? \"\";\n    item.json.gaps                   = data.gaps ?? \"\";\n    item.json.fit_contextual         = data.fit_contextual ?? \"\";\n    item.json.percentual_aderencia   = data.percentual_aderencia ?? 0;\n    item.json.taxa_hora              = data.taxa_hora ?? \"R$ 0,00\";\n    item.json.conclusao_recomendacao = data.conclusao_recomendacao ?? \"\";\n\n  } catch (err) {\n    item.json.parse_error = `Falha ao parsear saída do agente: ${err.message}`;\n  }\n}\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5920,
+        160
+      ],
+      "id": "d5525f4f-22d3-4d2c-8f56-176affb24fc1",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0220198f-49e9-44ff-a206-68552f59c660",
+              "name": "id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "85f64f10-a116-472a-a7aa-48ccb5d56dc1",
+              "name": "CorpoDoEmail",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "bd7f1cd8-0051-4a26-8344-b8174031f19c",
+              "name": "Assunto",
+              "value": "={{ $json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "2ea4410e-b954-4f5a-a42e-0cd025501b39",
+              "name": "DataRecebimento",
+              "value": "={{ $json.date }}",
+              "type": "string"
+            },
+            {
+              "id": "1574007b-1fc1-490a-ae06-e428752c92b4",
+              "name": "EmailRemetente",
+              "value": "={{ $json.from.value[0].address }}",
+              "type": "string"
+            },
+            {
+              "id": "5bc53bb4-0296-4a9a-aa67-8604247bd551",
+              "name": "NomeRemetente",
+              "value": "={{ $json.from.value[0].name }}",
+              "type": "string"
+            },
+            {
+              "id": "d8643513-edf2-4b6e-94a0-9aec4b2bee8e",
+              "name": "ID_ModeloDeCV",
+              "value": "1tE7qmb4XcaQltPT1LbYdrIJK3J3RPACRTPF9-zc-N6o",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2112,
+        208
+      ],
+      "id": "c3b114bd-8636-4223-b9f8-5253a1c3d4f8",
+      "name": "Fields_CamposOriginarios"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "89020d53-ac38-4c5a-b859-5b90704bdb50",
+              "name": "PERFIL",
+              "value": "={{ $json.RESUMO_CANDIDATO }}",
+              "type": "string"
+            },
+            {
+              "id": "e5d1cda0-a59d-4e48-b904-4e4b4a6b4031",
+              "name": "HABILIDADES",
+              "value": "={{ $json.HABILIDADES_CANDIDATO}}",
+              "type": "string"
+            },
+            {
+              "id": "53301527-45fa-4b56-9ac8-09a4c2d442fe",
+              "name": "EXPERIENCIA",
+              "value": "={{ $json.EXPERIENCIAS_CANDIDATO }}",
+              "type": "string"
+            },
+            {
+              "id": "8c8e9c83-922b-4b14-80bc-87690b0a1dd5",
+              "name": "IDIOMA",
+              "value": "={{ $json.IDIOMAS_CANDIDATO }}",
+              "type": "string"
+            },
+            {
+              "id": "85d93248-9ac4-4eb3-95be-004406e745b1",
+              "name": "EDUCACAO",
+              "value": "={{ $json.EDUCACAO_CANDIDATO }}",
+              "type": "string"
+            },
+            {
+              "id": "ce8c24ac-9a3f-4fe4-8ef8-a47773781120",
+              "name": "NOME_COMPLETO",
+              "value": "={{ $json.NOME_COMPLETO_CANDIDATO }}",
+              "type": "string"
+            },
+            {
+              "id": "9909c309-b1f9-463a-8b2c-4d09be5c7fde",
+              "name": "NOMEPASTADRIVE",
+              "value": "Candidatos_ERIKA",
+              "type": "string"
+            },
+            {
+              "id": "8d47c0a1-8e77-48e4-9b56-3872d6a79705",
+              "name": "LINKPASTA",
+              "value": "https://docs.google.com/spreadsheets/d/1zrMFIO-kYwdSdFPK9LwAQiwG-arHILYvh6GRV2byBnE/edit?usp=drive_link",
+              "type": "string"
+            },
+            {
+              "id": "5b68e2ad-d800-4ed0-b0a4-3344745bcb76",
+              "name": "NOMEARQUIVO",
+              "value": "={{ $json.NOME_COMPLETO_CANDIDATO }}",
+              "type": "string"
+            },
+            {
+              "id": "172cbb0b-2d12-46f8-ad57-ace9dd370436",
+              "name": "IDPlanilhaCandidatos",
+              "value": "1zrMFIO-kYwdSdFPK9LwAQiwG-arHILYvh6GRV2byBnE",
+              "type": "string"
+            },
+            {
+              "id": "7d73fb4e-6adf-40df-88ac-52dcadcbc821",
+              "name": "IDMoldeloCV",
+              "value": "1MumdiPdH_YLycDfTnwJJarZ6pMa8IcRAh1TbdpdV40s",
+              "type": "string"
+            },
+            {
+              "id": "76778572-b709-431e-8ede-e4964665aa9b",
+              "name": "INICIAIS_NOME",
+              "value": "={{ $json.INICIAIS_NOME }}",
+              "type": "string"
+            },
+            {
+              "id": "45548f5e-3ef8-497b-bd7a-98989b76baf7",
+              "name": "EXPERIENCIAS_ARRAY",
+              "value": "={{ $json.EXPERIENCIAS_OBJ }}",
+              "type": "array"
+            },
+            {
+              "id": "37978dfc-073d-4f81-8d60-89563d76a7a9",
+              "name": "EDUCACAO_ARRAY",
+              "value": "={{ $json.EDUCACAO_OBJ }}",
+              "type": "array"
+            },
+            {
+              "id": "8d90f795-5499-4c6b-a78a-09379ddb7f80",
+              "name": "EMAIL",
+              "value": "={{ $json.EMAIL_CANDIDATO }}",
+              "type": "string"
+            },
+            {
+              "id": "fcf11447-697f-4f1e-93e1-5d540ce2b4da",
+              "name": "WhatsApp",
+              "value": "={{ $json.TELEFONE_CELULAR }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5280,
+        224
+      ],
+      "id": "481b82ba-ee30-431c-ab3f-ebca88195d9a",
+      "name": "Fields_DeCamposParaCV"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "acd8d4f1-d9a9-45bc-9277-d24bba2a5922",
+              "name": "LinkCVNoDrive",
+              "value": "={{ $json.webViewLink }}",
+              "type": "string"
+            },
+            {
+              "id": "a03b6aed-151b-4c10-b4f3-22f33ce33e36",
+              "name": "DataGravacao",
+              "value": "={{ $json.createdTime }}",
+              "type": "string"
+            },
+            {
+              "id": "4288d918-698c-42ae-beed-1c9bc79555c9",
+              "name": "EmailOwner",
+              "value": "={{ $json.permissions[0].emailAddress }}",
+              "type": "string"
+            },
+            {
+              "id": "e60cb1aa-8177-4b73-9f00-f5c382cbbc11",
+              "name": "id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1184,
+        -400
+      ],
+      "id": "568b3289-4027-4215-8d7d-6c024fad75b1",
+      "name": "DadosCVGravado"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9fb7b6fe-8224-4e5e-b0c4-1a8bfc28c924",
+              "name": "PARECER_IA",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "4e1c6784-0139-44cd-be2d-34d57419f65e",
+              "name": "ResutadoIA",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "894abe4a-c689-4f7b-bc5b-32b8b17eb64b",
+              "name": "resumo_IA",
+              "value": "={{ $json.resumo_candidato }}",
+              "type": "string"
+            },
+            {
+              "id": "ce9a4c34-9dd5-4c6f-b481-0d9d98cef169",
+              "name": "aderencia_tecnica",
+              "value": "={{ $json.aderencia_tecnica }}",
+              "type": "string"
+            },
+            {
+              "id": "2ba37c88-52f5-4998-9830-1b463f1f0533",
+              "name": "gaps",
+              "value": "={{ $json.gaps }}",
+              "type": "string"
+            },
+            {
+              "id": "91de197b-f1bb-4683-92eb-3869615c6604",
+              "name": "fit_contextual",
+              "value": "={{ $json.fit_contextual }}",
+              "type": "string"
+            },
+            {
+              "id": "1b928f9a-193a-4aa4-91b3-305bca110e86",
+              "name": "MATCH_VAGA",
+              "value": "={{ $json.conclusao_recomendacao }}",
+              "type": "string"
+            },
+            {
+              "id": "ca8f74da-00bc-4482-a0c7-cd66d92e76be",
+              "name": "Taxa_Hora",
+              "value": "={{ $json.taxa_hora }}",
+              "type": "string"
+            },
+            {
+              "id": "4fdaeb91-1905-4504-be75-16e85c658501",
+              "name": "Percentual_Aderencia",
+              "value": "={{ $json.percentual_aderencia }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6192,
+        160
+      ],
+      "id": "453a03d4-64f2-4c07-a493-150b0b14456b",
+      "name": "Analise_IA"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6a835883-ea2c-4a2c-b73f-dab1fac38b39",
+              "leftValue": 1,
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7792,
+        256
+      ],
+      "id": "1905322b-cfbf-4584-b712-040e57d2355e",
+      "name": "VerificaSeEnviouTaxa"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f7b9c275-c769-4acc-b706-74a9e4b49f24",
+              "name": "TextoEmailRetorno",
+              "value": "' '",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        8096,
+        240
+      ],
+      "id": "73463f18-3531-4c3b-9589-fb1c1efee296",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        432
+      ],
+      "id": "4a970aff-9512-445a-ac43-e4e9992451ce",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "A9X3r2Rr3SYri84C",
+          "name": "n8n ser"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "Anexos[0].data",
+        "binaryPropertyName": "Anexo1",
+        "options": {
+          "fileName": "={{ $json.Anexos[0].fileName }}",
+          "mimeType": "={{ $json.Anexos[0].mimeType }}"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        -1264
+      ],
+      "id": "4a616986-f042-4a29-a64f-eb42ce30f9b7",
+      "name": "CVPDF",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Gmail Trigger').item.json.id }}",
+        "message": "=Olá  {{ $('Gmail Trigger').item.json.from.value[0].name }}, tudo bem?\n\nAqui é a RHanIA, Tech Recruiter da LPJ.\nRecebemos o email da sua candidatura para a vaga mas não conseguimos identificar seu currículo. \nPara prosseguir sua candidatura, nos reenvie seu curriculo em pdf, por favor!\n\nAtenciosamente,  RHanIA! ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -432,
+        -464
+      ],
+      "id": "f92f8f0e-509b-476e-ac44-a39af2f2de30",
+      "name": "Reply to a message1",
+      "webhookId": "5866d8d2-ba6a-40fc-a46f-4fffbee2c165",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YihGCJCDiMLw2ecq",
+          "name": "gmail n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ad1343d2-e115-4104-9061-d450d3b8fe75",
+              "leftValue": "={{ $binary.attachment_0.fileName || '' }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -864,
+        144
+      ],
+      "id": "c747717d-4dd9-44b7-a418-ee7c4a8f5c80",
+      "name": "if has attachment"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c93510b1-b0cb-4778-a686-2e7aa910d053",
+              "leftValue": "={{$binary.attachment_1}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        160
+      ],
+      "id": "b9dc4510-212a-4884-a6f6-de61a5f851c8",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Gmail Trigger').item.json.id }}",
+        "message": "=Olá {{ $('Gmail Trigger').item.json.from.value[0].name }} tudo bem?\nIdentificamos que você tentou se candidatar para nossa vaga, mas identificamos multiplos anexos. Se quiser prosseguir com a candidatura, nos envie um email somente com  seu curriculo anexado!\n\nAtenciosamente RhanIA",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        624,
+        -560
+      ],
+      "id": "dc3af830-c115-4eec-ba73-318c7ff19284",
+      "name": "Reply to a message",
+      "webhookId": "4a95a0d5-b61c-4d1c-a1db-239336c8b315",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YihGCJCDiMLw2ecq",
+          "name": "gmail n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        320
+      ],
+      "id": "a9648b1b-e704-4d24-8624-8f52d3c8ffba",
+      "name": "Google Gemini Chat Model2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "A9X3r2Rr3SYri84C",
+          "name": "n8n ser"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4295bd92-4f92-4b66-9a01-484d8132b82c",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "{\"isCurriculo\": true}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        160
+      ],
+      "id": "54d8e08a-b45b-4f4b-9e48-e2b9407e1df5",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um classificador de texto. Analise o texto fornecido e responda **APENAS** com um JSON válido **em uma única linha**, exatamente uma das duas formas:\n\n{\"isCurriculo\": true}\n{\"isCurriculo\": false}\n\nNÃO escreva nada além desse JSON (sem explicações, sem código-fence, sem comentários).\n\nEntrada:\nTexto: {{ $json.text }}\n\nRegras de classificação (case-insensitive):\n\n1. O texto é **CURRÍCULO** (retornar true) se houver evidência clara de pelo menos **2** dos seguintes tipos de informação:\n   - **Dados pessoais/contato**: nome + (telefone ou e-mail ou LinkedIn ou endereço).\n   - **Experiência profissional**: cargos, empresas, descrições de funções, períodos/anos.\n   - **Formação acadêmica**: curso, grau, instituição, anos de conclusão.\n   - **Habilidades/competências**: listas de skills, tecnologias, competências técnicas ou comportamentais.\n\n   **Ou** retorne true se houver **dados pessoais/contato** **E** pelo menos **uma** das outras categorias (experiência, formação ou habilidades).\n\n   Exemplos de marcadores positivos: \"Experiência\", \"Formação\", \"Educação\", \"Habilidades\", \"Competências\", \"Resumo profissional\", \"Objetivo\", \"Contato\", \"Telefone\", \"E-mail\", \"LinkedIn\", \"Cargo\", \"Empresa\", \"Período\".\n\n2. O texto é **NÃO-CURRÍCULO** (retornar false) se houver marcadores fortes de documentos comerciais/transacionais ou promocionais, como:\n   - \"Nota Fiscal\", \"Fatura\", \"Boleto\", \"Recibo\", \"Comprovante\", \"Valor a pagar\", \"Vencimento\", \"Nº\", \"NFe\"\n   - \"Contrato\", \"Cláusula\", \"Termo\", \"Assinatura do contratante\"\n   - \"Anúncio\", \"Promoção\", \"Publicidade\", \"Cupom\", \"Oferta\"\n\n   Se **aparecerem** essas palavras-chave claramente ligadas a fatura/contrato/propaganda, retorne **false**, mesmo que haja alguma palavra que lembre currículo.\n\n3. Regra de desempate e tolerância:\n   - Seja tolerante para evitar falso-negativo: se houver **ao menos um marcador positivo forte** (por exemplo, \"Experiência\", \"Formação\", uma lista de habilidades ou nome + e-mail/telefone) trate como **true**, a menos que haja indicadores fortes e predominantes de documento financeiro/contratual (caso em que prevalece false).\n   - Se o texto for **apenas** um cabeçalho, assinatura de e-mail curta ou apenas um nome sem contato/experiências/educação/habilidades, retorne **false**.\n\n4. Outras instruções:\n   - Faça análise indiferente ao idioma (português/inglês) e à capitalização.\n   - Retorne sempre um JSON com a chave `isCurriculo` e um booleano JSON (`true` ou `false`), nada mais.\n\nExemplos (apenas para treinar seu comportamento — **não** inclua exemplos nas respostas):\n- \"Nome: Ana; E-mail: ana@x.com; Experiência: Desenvolvedora...\"  → {\"isCurriculo\": true}\n- \"Nota Fiscal nº 123 — Valor a pagar R$...\" → {\"isCurriculo\": false}\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        160
+      ],
+      "id": "db765809-099c-4c1e-a81d-6b6faf4c3fec",
+      "name": "verifica se é curriculo"
+    },
+    {
+      "parameters": {
+        "operation": "deleteFile",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2000,
+        -272
+      ],
+      "id": "9287dabd-6594-4a33-a280-7b7cf366de11",
+      "name": "Delete a file",
+      "executeOnce": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GCRMmB0z0kiomtQp",
+          "name": "drive n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "=attachment_0",
+        "name": "=attachment_0",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "root",
+          "cachedResultName": "/ (Root folder)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        848,
+        -400
+      ],
+      "id": "fb45be51-a33e-4003-abdb-321957d32a81",
+      "name": "Uploadtodrive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GCRMmB0z0kiomtQp",
+          "name": "drive n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Gmail Trigger').item.json.id }}",
+        "message": "=Olá {{ $('Gmail Trigger').item.json.from.value[0].name }},\n\nRecebemos o seu e-mail, mas o arquivo anexado não parece ser um currículo válido.  \nPor favor, envie novamente o seu currículo em formato PDF.\n\nObrigado,  \nEquipe de Recrutamento",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2192,
+        -288
+      ],
+      "id": "7576abbc-0412-4699-a350-89c2562f6e44",
+      "name": "Reply to a message2",
+      "webhookId": "9b9f8bf6-321d-4d4e-a51d-d71f808feaa4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YihGCJCDiMLw2ecq",
+          "name": "gmail n8n server"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1792,
+        -192
+      ],
+      "id": "59e970de-4b9b-45f4-96e4-2ad40056977b",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fields_CamposOriginarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Classifier": {
+      "main": [
+        [
+          {
+            "node": "Get a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get a message": {
+      "main": [
+        [
+          {
+            "node": "if has attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "verifica se é curriculo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AgentLeCV",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Extratifica CV": {
+      "main": [
+        [
+          {
+            "node": "Fields_DeCamposParaCV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GravaNaPlanilhaVaga": {
+      "main": [
+        [
+          {
+            "node": "CriaPastaCandidato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CriaPastaCandidato": {
+      "main": [
+        [
+          {
+            "node": "CopiaModeloCV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CopiaModeloCV": {
+      "main": [
+        [
+          {
+            "node": "Update a document1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a document1": {
+      "main": [
+        [
+          {
+            "node": "VerificaSeEnviouTaxa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AgentLeCV": {
+      "main": [
+        [
+          {
+            "node": "Code Extratifica CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent_FazMatch_Candidato": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent_FazMatch_Candidato",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a document in Google Docs": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agent_FazMatch_Candidato",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agent_FazMatch_Candidato",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Analise_IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fields_CamposOriginarios": {
+      "main": [
+        [
+          {
+            "node": "Text Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fields_DeCamposParaCV": {
+      "main": [
+        [
+          {
+            "node": "Agent_FazMatch_Candidato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analise_IA": {
+      "main": [
+        [
+          {
+            "node": "GravaNaPlanilhaVaga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VerificaSeEnviouTaxa": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Text Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CVPDF": {
+      "main": [
+        []
+      ]
+    },
+    "if has attachment": {
+      "main": [
+        [
+          {
+            "node": "Reply to a message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Reply to a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Uploadtodrive",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "verifica se é curriculo",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "AgentLeCV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "verifica se é curriculo": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete a file": {
+      "main": [
+        [
+          {
+            "node": "Reply to a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Uploadtodrive": {
+      "main": [
+        [
+          {
+            "node": "DadosCVGravado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DadosCVGravado": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Delete a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "248c9b9f-fcf2-4b57-97fa-dc5bab471c6c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "807138b7646fc3b35fe8d414d5cd61eb6889d95886d54e7341e1a712e0242dc1"
+  },
+  "id": "2N4YspQ7DS7EI4rx",
+  "tags": []
+}
